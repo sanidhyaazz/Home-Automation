@@ -5,40 +5,62 @@
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
 
-#define relay 27
-#define button 33
+#define RELAY_PIN   27
+#define SWITCH_PIN  33
 
 char ssid[] = "Jains_2.4G";
 char pass[] = "PPSK@5249_kanak";
 
-// Variable to store relay state
+// Relay state
 bool relayState = false;
+// Track last physical switch state
+bool lastSwitchState = HIGH;
 
-BLYNK_WRITE(V0) { // Triggered when Blynk button is pressed
-  relayState = param.asInt(); // 1 = ON, 0 = OFF
-  digitalWrite(relay, relayState ? HIGH : LOW);
+// ---- Blynk handler ----
+BLYNK_WRITE(V0) {
+  relayState = param.asInt();   // button value from app (1/0)
+  digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
+  Serial.print("Blynk set relay: ");
+  Serial.println(relayState);
+}
+
+// ---- Helper ----
+void setRelay(bool state) {
+  relayState = state;
+  digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
+  Blynk.virtualWrite(V0, relayState);  // keep app in sync
 }
 
 void setup() {
-  pinMode(relay, OUTPUT);
-  pinMode(button, INPUT_PULLUP); // internal pull-up enabled
   Serial.begin(115200);
+
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW); // default OFF
+
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
+
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  lastSwitchState = digitalRead(SWITCH_PIN);
 }
 
 void loop() {
   Blynk.run();
 
-  static bool lastButtonState = LOW;
-  bool currentButtonState = digitalRead(button);
+  // Read physical switch
+  bool currentSwitchState = digitalRead(SWITCH_PIN);
 
-  // Detect button press (state change from LOW to HIGH)
-  if (currentButtonState == HIGH && lastButtonState == LOW) {
-    relayState = !relayState; // Toggle relay
-    digitalWrite(relay, relayState ? HIGH : LOW);
-    Blynk.virtualWrite(V0, relayState); // Sync with app
-    delay(50); // Debounce
+  // Detect change in switch position
+  if (currentSwitchState != lastSwitchState) {
+    if (currentSwitchState == LOW) {
+      // Switch ON
+      setRelay(true);
+    } else {
+      // Switch OFF
+      setRelay(false);
+    }
+    delay(50); // debounce
   }
 
-  lastButtonState = currentButtonState;
+  lastSwitchState = currentSwitchState;
 }
